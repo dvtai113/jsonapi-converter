@@ -51,6 +51,11 @@ public class JSONAPIConverterFactory extends Converter.Factory {
 		this.serializer = this.deserializer;
 	}
 
+	public JSONAPIConverterFactory(boolean supportMultipleResources, ObjectMapper mapper, Class<?>... classes) {
+		this.deserializer = new ResourceConverter(supportMultipleResources, mapper, classes);
+		this.serializer = this.deserializer;
+	}
+
 	/**
 	 * Sets alternative converter factory to use in case type is cannot be handled by this factory. <br />
 	 *

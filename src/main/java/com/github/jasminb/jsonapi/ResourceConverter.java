@@ -39,6 +39,7 @@ public class ResourceConverter {
 	private final ResourceCache resourceCache;
 	private final Set<DeserializationFeature> deserializationFeatures = DeserializationFeature.getDefaultFeatures();
 	private final Set<SerializationFeature> serializationFeatures = SerializationFeature.getDefaultFeatures();
+	private boolean supportMultipleResources = false;
 
 	private RelationshipResolver globalResolver;
 
@@ -72,6 +73,11 @@ public class ResourceConverter {
 		objectMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
 		resourceCache = new ResourceCache();
+	}
+
+	public ResourceConverter(boolean supportMultipleResources, ObjectMapper mapper, Class<?>... classes) {
+		this(mapper, classes);
+		this.supportMultipleResources = supportMultipleResources;
 	}
 
 	/**
@@ -133,7 +139,7 @@ public class ResourceConverter {
 	 * @param <T> type
 	 * @return {@link JSONAPIDocument}
 	 */
-	public <T> JSONAPIDocument<T> readDocument(byte[] data, Class<T> clazz) {
+	public <T> JSONAPIDocument<T> readDocument(byte[] data, Class<? extends T> clazz) {
 		return readDocument(new ByteArrayInputStream(data), clazz);
 	}
 
@@ -144,7 +150,7 @@ public class ResourceConverter {
 	 * @param <T> type
 	 * @return {@link JSONAPIDocument}
 	 */
-	public <T> JSONAPIDocument<T> readDocument(InputStream dataStream, Class<T> clazz) {
+	public <T> JSONAPIDocument<T> readDocument(InputStream dataStream, Class<? extends T> clazz) {
 		try {
 			resourceCache.init();
 
@@ -191,7 +197,7 @@ public class ResourceConverter {
 	 * @param <T> type
 	 * @return {@link JSONAPIDocument}
 	 */
-	public <T> JSONAPIDocument<List<T>> readDocumentCollection(byte[] data, Class<T> clazz) {
+	public <T> JSONAPIDocument<List<T>> readDocumentCollection(byte[] data, Class<? extends T> clazz) {
 		return readDocumentCollection(new ByteArrayInputStream(data), clazz);
 	}
 	/**
@@ -201,7 +207,7 @@ public class ResourceConverter {
 	 * @param <T> type
 	 * @return {@link JSONAPIDocument}
 	 */
-	public <T> JSONAPIDocument<List<T>> readDocumentCollection(InputStream dataStream, Class<T> clazz) {
+	public <T> JSONAPIDocument<List<T>> readDocumentCollection(InputStream dataStream, Class<? extends T> clazz) {
 		try {
 			resourceCache.init();
 
@@ -215,9 +221,16 @@ public class ResourceConverter {
 
 			List<T> resourceList = new ArrayList<>();
 
-			for (JsonNode element : rootNode.get(DATA)) {
-				T pojo = readObject(element, clazz, true);
-				resourceList.add(pojo);
+			if (supportMultipleResources) {
+				for (JsonNode element : rootNode.get(DATA)) {
+					T pojo = readObject(element, true);
+					resourceList.add(pojo);
+				}
+			} else {
+				for (JsonNode element : rootNode.get(DATA)) {
+					T pojo = readObject(element, clazz, true);
+					resourceList.add(pojo);
+				}
 			}
 
 			JSONAPIDocument<List<T>> result = new JSONAPIDocument<>(resourceList);
@@ -303,6 +316,18 @@ public class ResourceConverter {
 		return result;
 	}
 
+	private <T> T readObject(JsonNode source, boolean handleRelationships)
+			throws IllegalAccessException, IOException, InstantiationException {
+		String type = source.get(TYPE).asText();
+		if (type != null) {
+			Class<?> clazz = configuration.getTypeClass(type);
+			if (clazz != null) {
+				return (T) this.readObject(source, clazz, handleRelationships);
+			}
+			return null;
+		}
+		return null;
+	}
 
 	/**
 	 * Converts included data and returns it as pairs of its unique identifiers and converted types.
